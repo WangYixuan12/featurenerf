@@ -9,7 +9,7 @@ import warnings
 import torch
 import torch.autograd.profiler as profiler
 
-from util import repeat_interleave
+from featurenerf.src.util import repeat_interleave
 
 from .code import PositionalEncoding
 from .encoder import ImageEncoder

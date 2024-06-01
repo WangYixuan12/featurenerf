@@ -8,9 +8,133 @@ import mcubes
 import numpy as np
 import torch
 import tqdm
+from matplotlib import colormaps
+import plotly.graph_objects as go
 
-import util
+import featurenerf.src.util as util
 
+def vis_grid_plotly(grid : np.ndarray, up=None, center=None, eye=None, size=2, output_name=None):
+    """Visualize grid in plotly
+    
+    Args:
+        grid (np.ndarray): (X, Y, Z) grid with values
+    """
+    # Create data_ls
+    data_ls = []
+    X, Y, Z = grid.shape
+    L = max(max(X, Y), Z)
+    grid_max = grid.max()
+    grid_min = grid.min()
+    cmap = colormaps.get_cmap("plasma")
+    x_ls = []
+    y_ls = []
+    z_ls = []
+    plotly_colors = []
+    for x_i in range(X):
+        for y_i in range(Y):
+            for z_i in range(Z):
+                x, y, z = x_i / L, y_i / L, z_i / L
+                value = grid[x_i, y_i, z_i]
+                colors = cmap((value - grid_min) / (grid_max - grid_min))[:3]
+
+                # append
+                x_ls.append(x)
+                y_ls.append(y)
+                z_ls.append(z)
+                plotly_colors.append(f'rgb({colors[0]}, {colors[1]}, {colors[2]})')
+    data_ls.append(go.Scatter3d(x=np.array(x_ls), y=np.array(y_ls), z=np.array(z_ls), mode='markers', marker=dict(size=size, color=plotly_colors,)))
+        
+    # Plot mesh
+    go_pcd = go.Figure(data=data_ls,
+                       layout=go.Layout(scene=dict(aspectmode='data'),))
+
+    if up is not None:
+        camera = dict(
+            up=dict(x=up[0], y=up[1], z=up[2]),
+            center=dict(x=center[0], y=center[1], z=center[2]),
+            eye=dict(x=eye[0], y=eye[1], z=eye[2])
+        )
+
+        go_pcd.update_layout(scene_camera=camera)
+
+    go_pcd.update_layout(margin=dict(l=5,r=5,b=5,t=5,), showlegend=False)
+    go_pcd.show()
+    if output_name is not None:
+        go_pcd.write_html(f'{output_name}.html')
+
+def vis_pts_with_values_plotly(pts : np.ndarray, values : np.ndarray, up=None, center=None, eye=None, size=2, output_name=None):
+    """Visualize grid in plotly
+    
+    Args:
+        pts (np.ndarray): (N, 3) points
+        values (np.ndarray): (N, ) values
+    """
+    assert pts.shape[0] == values.shape[0]
+    # Create data_ls
+    data_ls = []
+    N = pts.shape[0]
+    grid_max = values.max()
+    grid_min = values.min()
+    cmap = colormaps.get_cmap("plasma")
+    colors = cmap((values - grid_min) / (grid_max - grid_min))[:, :3]
+    plotly_colors = []
+    for i in range(N):
+        # append
+        plotly_colors.append(f'rgb({colors[i, 0]}, {colors[i, 1]}, {colors[i, 2]})')
+    data_ls.append(go.Scatter3d(x=pts[:, 0], y=pts[:, 1], z=pts[:, 2], mode='markers', marker=dict(size=size, color=plotly_colors,)))
+        
+    # Plot mesh
+    go_pcd = go.Figure(data=data_ls,
+                       layout=go.Layout(scene=dict(aspectmode='data'),))
+
+    if up is not None:
+        camera = dict(
+            up=dict(x=up[0], y=up[1], z=up[2]),
+            center=dict(x=center[0], y=center[1], z=center[2]),
+            eye=dict(x=eye[0], y=eye[1], z=eye[2])
+        )
+
+        go_pcd.update_layout(scene_camera=camera)
+
+    go_pcd.update_layout(margin=dict(l=5,r=5,b=5,t=5,), showlegend=False)
+    go_pcd.show()
+    if output_name is not None:
+        go_pcd.write_html(f'{output_name}.html')
+
+def vis_pts_with_rgbs_plotly(pts : np.ndarray, rgbs : np.ndarray, up=None, center=None, eye=None, size=2, output_name=None):
+    """Visualize points with colors in plotly
+    
+    Args:
+        pts (np.ndarray): (N, 3) points
+        rgbs (np.ndarray): (N, 3) colors
+    """
+    assert pts.shape[0] == rgbs.shape[0]
+    # Create data_ls
+    data_ls = []
+    N = pts.shape[0]
+    plotly_colors = []
+    for i in range(N):
+        # append
+        plotly_colors.append(f'rgb({rgbs[i, 0]}, {rgbs[i, 1]}, {rgbs[i, 2]})')
+    data_ls.append(go.Scatter3d(x=pts[:, 0], y=pts[:, 1], z=pts[:, 2], mode='markers', marker=dict(size=size, color=plotly_colors,)))
+
+    # Plot mesh
+    go_pcd = go.Figure(data=data_ls,
+                          layout=go.Layout(scene=dict(aspectmode='data'),))
+    
+    if up is not None:
+        camera = dict(
+            up=dict(x=up[0], y=up[1], z=up[2]),
+            center=dict(x=center[0], y=center[1], z=center[2]),
+            eye=dict(x=eye[0], y=eye[1], z=eye[2])
+        )
+
+        go_pcd.update_layout(scene_camera=camera)
+    
+    go_pcd.update_layout(margin=dict(l=5,r=5,b=5,t=5,), showlegend=False)
+    go_pcd.show()
+    if output_name is not None:
+        go_pcd.write_html(f'{output_name}.html')
 
 def marching_cubes(
     occu_net,
@@ -22,6 +146,7 @@ def marching_cubes(
     eval_batch_size=100000,
     coarse=True,
     device=None,
+    pose=None,
 ):
     """
     Run marching cubes on network. Uses PyMCubes.
@@ -48,33 +173,53 @@ def marching_cubes(
         occu_net.eval()
 
         all_sigmas = []
+        all_rgbs = []
         if device is None:
             device = next(occu_net.parameters()).device
         grid_spl = torch.split(grid, eval_batch_size, dim=0)
         if occu_net.use_viewdirs:
+            # # generate viewdirs
+            # grid_rays = util.gen_rays(pose.reshape(-1, 4, 4), 128, 128, 140, 0.8, 1.8)
+            # all_rays = grid_rays.reshape(1, -1, 8)
+            # fake_viewdirs = all_rays[..., 3:6]
+
             fake_viewdirs = -grid / torch.norm(grid, dim=-1).unsqueeze(-1)
             vd_spl = torch.split(fake_viewdirs, eval_batch_size, dim=0)
             for pnts, vd in tqdm.tqdm(zip(grid_spl, vd_spl), total=len(grid_spl)):
-                outputs = occu_net(pnts.to(device=device), coarse=coarse, viewdirs=vd.to(device=device))
+                outputs = occu_net(pnts.to(device=device)[None], coarse=coarse, viewdirs=vd.to(device=device))
                 sigmas = outputs[..., sigma_idx]
-                all_sigmas.append(sigmas.cpu())
+                all_sigmas.append(sigmas.cpu()[0])
+                all_rgbs.append(outputs[..., :3].cpu()[0])
         else:
             for pnts in tqdm.tqdm(grid_spl):
                 outputs = occu_net(pnts.to(device=device), coarse=coarse)
                 sigmas = outputs[..., sigma_idx]
-                all_sigmas.append(sigmas.cpu())
+                all_sigmas.append(sigmas.cpu()[0])
+                all_rgbs.append(outputs[..., :3].cpu()[0])
         sigmas = torch.cat(all_sigmas, dim=0)
         sigmas = sigmas.view(*reso).cpu().numpy()
 
+        rgbs = torch.cat(all_rgbs, dim=0)
+        rgbs = rgbs.view(*reso, 3).cpu().numpy()
+
+        vis_pts_with_values_plotly(grid.cpu().numpy()[::100], sigmas.reshape(-1)[::100])
+        # vis_grid_plotly(sigmas[::4][:, ::4][..., ::4])
+
         print("Running marching cubes")
         vertices, triangles = mcubes.marching_cubes(sigmas, isosurface)
+        vertices_color = []
+        for v in vertices:
+            x, y, z = v
+            rgb = rgbs[int(x), int(y), int(z)]
+            vertices_color.append(rgb)
+        vertices_color = np.array(vertices_color)
         # Scale
         c1, c2 = np.array(c1), np.array(c2)
         vertices *= (c2 - c1) / np.array(reso)
 
     if is_train:
         occu_net.train()
-    return vertices + c1, triangles
+    return vertices + c1, triangles, vertices_color
 
 
 def save_obj(vertices, triangles, path, vert_rgb=None):

@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
-from util import get_image_to_tensor_balanced, get_mask_to_tensor
+from featurenerf.src.util import get_image_to_tensor_balanced, get_mask_to_tensor
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets")
 
@@ -64,7 +64,7 @@ class FeatureNeRFDataset(Dataset):
             split_file = json.load(f)
         self.obj_ids = split_file[stage]
         # remove invalid obj ids
-        self.obj_ids = [x for x in self.obj_ids if x != "f9c1d7748c15499c6f2bd1c4e9adb41"]
+        # self.obj_ids = [x for x in self.obj_ids if x != "f9c1d7748c15499c6f2bd1c4e9adb41"]
 
         if use_part_anno:
             self.part_anno_dir = os.path.join(data_root, part_anno_type, synset)

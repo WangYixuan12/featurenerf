@@ -12,10 +12,10 @@ from dotmap import DotMap
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-import util
-from data import get_split_dataset
-from model import loss, make_model
-from render import NeRFEmbedRenderer
+import featurenerf.src.util as util
+from featurenerf.src.data import get_split_dataset
+from featurenerf.src.model import loss, make_model
+from featurenerf.src.render import NeRFEmbedRenderer
 
 
 def extra_args(parser):

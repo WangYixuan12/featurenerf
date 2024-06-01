@@ -4,7 +4,7 @@ import torch
 import torch.autograd.profiler as profiler
 from torch import nn
 
-import util
+import featurenerf.src.util as util
 
 
 # Resnet Blocks

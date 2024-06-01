@@ -20,10 +20,10 @@ from pyhocon import ConfigFactory
 torch.multiprocessing.set_sharing_strategy("file_system")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-import util
-from data import get_split_dataset
-from model import make_model
-from render import NeRFEmbedRenderer
+import featurenerf.src.util as util
+from featurenerf.src.data import get_split_dataset
+from featurenerf.src.model import make_model
+from featurenerf.src.render import NeRFEmbedRenderer
 
 
 def extra_args(parser):
@@ -203,7 +203,7 @@ def transform(pts: torch.Tensor, tf_mat: torch.Tensor) -> torch.Tensor:
 
 
 def compose_intr_mat(fu, fv, cu, cv, skew=0):
-    intr_mat = np.array([[fu, skew, cu], [0, fv, cv], [0, 0, 1]])
+    intr_mat = np.array([[fu.cpu().item(), skew, cu], [0, fv.cpu().item(), cv], [0, 0, 1]])
     return intr_mat
 
 
@@ -212,11 +212,11 @@ def project_points(batch_poses: torch.Tensor, batch_points: torch.Tensor, focal,
     wld2opengl = inverse(batch_poses)
     opengl2opencv = torch.tensor(
         [[1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0], [0.0, 0.0, -1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
-    )
+    ).to(device=batch_points.device)
     wld2opencv = opengl2opencv[None].repeat(batch_size, 1, 1) @ wld2opengl
 
     intr = compose_intr_mat(focal, focal, width / 2, height / 2)
-    intr = torch.from_numpy(intr)[None].repeat(batch_size, 1, 1).float()
+    intr = torch.from_numpy(intr)[None].repeat(batch_size, 1, 1).float().to(device=batch_points.device)
 
     uvs = project(transform(batch_points, wld2opencv), intr).long()
     uvs[:, :, 0] = torch.clamp(uvs[:, :, 0], 0, width - 1)
@@ -240,6 +240,23 @@ if __name__ == "__main__":
         src_kp_labels, trg_kp_labels = src_data["kp_labels"], trg_data["kp_labels"]
         src_kp_pts = src_kp_labels[..., :3]
         trg_kp_pts = trg_data["kp_pts"]
+
+        src_imgs = src_imgs.to(DEVICE)
+        trg_imgs = trg_imgs.to(DEVICE)
+        src_poses = src_poses.to(DEVICE)
+        trg_poses = trg_poses.to(DEVICE)
+        src_masks = src_masks.to(DEVICE)
+        trg_masks = trg_masks.to(DEVICE)
+        src_focal = src_focal.to(DEVICE)
+        trg_focal = trg_focal.to(DEVICE)
+        src_part_pts = src_part_pts.to(DEVICE)
+        src_part_labels = src_part_labels.to(DEVICE)
+        trg_part_pts = trg_part_pts.to(DEVICE)
+        trg_part_labels = trg_part_labels.to(DEVICE)
+        src_kp_pts = src_kp_pts.to(DEVICE)
+        src_kp_labels = src_kp_labels.to(DEVICE)
+        trg_kp_pts = trg_kp_pts.to(DEVICE)
+        trg_kp_labels = trg_kp_labels.to(DEVICE)
 
         src_unique_part_label = torch.unique(src_part_labels).tolist()
         src_unique_part_label = sorted([x for x in src_unique_part_label if x != 0])
@@ -323,10 +340,10 @@ if __name__ == "__main__":
             src_img[src_mask == 0] = [255, 255, 255]  # white background
             src_img_w_t = cv2.putText(src_img.copy(), "src", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
             first_row.append(src_img_w_t)
-            src_seg_img = seg_map_to_vis_map(src_img, src_part_uvs[0], src_part_labels, "src_label")
+            src_seg_img = seg_map_to_vis_map(src_img, src_part_uvs[0].detach().cpu().numpy(), src_part_labels.detach().cpu().numpy(), "src_label")
             first_row.append(src_seg_img)
-            src_gt_kp_uvs = project_points(src_pose.reshape(-1, 4, 4), src_kp_labels[None, :, :3], src_focal, H, W)
-            src_gt_kp = np.concatenate([src_gt_kp_uvs[0], src_kp_labels[:, 3:]], axis=1)
+            src_gt_kp_uvs = project_points(src_pose.reshape(-1, 4, 4), src_kp_labels[None, :, :3], src_focal, H, W).detach().cpu().numpy()
+            src_gt_kp = np.concatenate([src_gt_kp_uvs[0], src_kp_labels[:, 3:].detach().cpu().numpy()], axis=1)
             src_kp_img = draw_kps(src_img, src_gt_kp, inter_kp_labels, "src_kp")
             second_row.append(src_kp_img)
 
@@ -336,10 +353,10 @@ if __name__ == "__main__":
             trg_img[trg_mask == 0] = [255, 255, 255]  # white background
             trg_img_w_t = cv2.putText(trg_img.copy(), "trg", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
             first_row.append(trg_img_w_t)
-            trg_seg_img = seg_map_to_vis_map(trg_img, trg_part_uvs[0], trg_part_labels, "trg_label")
+            trg_seg_img = seg_map_to_vis_map(trg_img, trg_part_uvs[0].detach().cpu().numpy(), trg_part_labels.detach().cpu().numpy(), "trg_label")
             first_row.append(trg_seg_img)
-            trg_gt_kp_uvs = project_points(trg_pose.reshape(-1, 4, 4), trg_kp_labels[None, :, :3], trg_focal, H, W)
-            trg_gt_kp = np.concatenate([trg_gt_kp_uvs[0], trg_kp_labels[:, 3:]], axis=1)
+            trg_gt_kp_uvs = project_points(trg_pose.reshape(-1, 4, 4), trg_kp_labels[None, :, :3], trg_focal, H, W).detach().cpu().numpy()
+            trg_gt_kp = np.concatenate([trg_gt_kp_uvs[0], trg_kp_labels[:, 3:].detach().cpu().numpy()], axis=1)
             trg_kp_img = draw_kps(trg_img, trg_gt_kp, inter_kp_labels, "trg_kp")
             second_row.append(trg_kp_img)
 
@@ -379,24 +396,24 @@ if __name__ == "__main__":
             pred_kp = torch.cat([pred_pts, src_kp_labels[:, -1].reshape(-1, 1)], dim=-1)
             pred_kp = torch.cat([pred_kp[pred_kp[:, -1] == x] for x in inter_kp_labels])
             gt_kp = torch.cat([trg_kp_labels[trg_kp_labels[..., -1] == x] for x in inter_kp_labels])
-            dist = np.linalg.norm(pred_kp[:, :3] - gt_kp[:, :3], axis=1)
+            dist = np.linalg.norm(pred_kp[:, :3].detach().cpu().numpy() - gt_kp[:, :3].detach().cpu().numpy(), axis=1)
             kp_accs = [np.sum(dist < thre) / float(len(dist)) for thre in [0.025, 0.05, 0.075, 0.1]]
 
             result[feat_type] = {
                 "iou": iou,
                 "kp_accs": kp_accs,
-                "pred_kp": pred_kp.numpy().tolist(),
-                "gt_kp": gt_kp.numpy().tolist(),
+                "pred_kp": pred_kp.detach().cpu().numpy().tolist(),
+                "gt_kp": gt_kp.detach().cpu().numpy().tolist(),
             }
 
             if args.save_vis:
-                pred_seg_img = seg_map_to_vis_map(trg_img, trg_part_uvs[0], pred_part_labels, feat_type)
+                pred_seg_img = seg_map_to_vis_map(trg_img, trg_part_uvs[0].detach().cpu().numpy(), pred_part_labels, feat_type)
                 first_row.append(pred_seg_img)
                 pred_kp_uvs = project_points(trg_pose.reshape(-1, 4, 4), pred_kp[None, :, :3], trg_focal, H, W)
                 second_row.append(
                     draw_kps(
                         trg_img.copy(),
-                        np.concatenate([pred_kp_uvs[0], pred_kp[:, 3:]], axis=1),
+                        np.concatenate([pred_kp_uvs[0].detach().cpu().numpy(), pred_kp[:, 3:].detach().cpu().numpy()], axis=1),
                         inter_kp_labels,
                         text=feat_type,
                     )

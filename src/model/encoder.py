@@ -8,8 +8,8 @@ import torch.nn.functional as F
 import torchvision
 from torch import nn
 
-import util
-from model.custom_encoder import ConvEncoder
+import featurenerf.src.util as util
+from featurenerf.src.model.custom_encoder import ConvEncoder
 
 TORCHVISION_WEIGHTS = {
     "resnet18": torchvision.models.resnet.ResNet18_Weights.DEFAULT,

@@ -9,7 +9,8 @@ import warnings
 import torch
 import torch.autograd.profiler as profiler
 
-from util import repeat_interleave
+from featurenerf.src.util import repeat_interleave
+from featurenerf.src.util.recon import marching_cubes
 
 from .code import PositionalEncoding
 from .encoder import ImageEncoder
@@ -285,6 +286,9 @@ class PixelNeRFEmbedNet(torch.nn.Module):
             return output
         else:
             return output, last_feat
+    
+    def to_mesh(self, isosurface=50.0, c1 = [-1, -1, -1], c2 = [1, 1, 1], reso = [128, 128, 128]):
+        return marching_cubes(self, device=self.poses.device, pose=self.poses[0], isosurface=isosurface, c1=c1, c2=c2, reso=reso)
 
     def load_weights(self, args, opt_init=False, strict=True, device=None):
         """

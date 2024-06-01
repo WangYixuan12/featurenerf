@@ -21,10 +21,10 @@ from pyhocon import ConfigFactory
 torch.multiprocessing.set_sharing_strategy("file_system")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-import util
-from data import get_split_dataset
-from model import make_model
-from render import NeRFEmbedRenderer
+import featurenerf.src.util as util
+from featurenerf.src.data import get_split_dataset
+from featurenerf.src.model import make_model
+from featurenerf.src.render import NeRFEmbedRenderer
 
 
 def extra_args(parser):
@@ -92,6 +92,15 @@ for method_name in nets:
 z_near = dset.z_near
 z_far = dset.z_far
 
+
+def vis_feat(feats : torch.Tensor):
+    from sklearn.decomposition import PCA
+    feats = feats.cpu().numpy()
+    pca = PCA(n_components=3)
+    feats_pca = pca.fit_transform(feats)
+    for i in range(3):
+        feats_pca[:, i] = (feats_pca[:, i] - np.min(feats_pca[:, i])) / (np.max(feats_pca[:, i]) - np.min(feats_pca[:, i]))
+    return feats_pca
 
 @torch.no_grad()
 def extract_feature_map(img, pose, focal, feat=None, net=None, render_par=None, H=128, W=128, eval_ray_num=10000):
@@ -210,15 +219,17 @@ if __name__ == "__main__":
         # ----------------- Extract feature map -----------------
         src_norm_feats = {}
         for method_name in model_info:
-            src_norm_feats[method_name] = extract_feature_map(
-                src_imgs[view_idx : view_idx + 1],
-                src_poses[view_idx : view_idx + 1],
-                src_focal,
-                feat=None,
-                net=nets[method_name],
-                render_par=render_pars[method_name],
-                eval_ray_num=10000 if "diff" in method_name else 20000,
-            )
+            # src_norm_feats[method_name] = extract_feature_map(
+            #     src_imgs[view_idx : view_idx + 1],
+            #     src_poses[view_idx : view_idx + 1],
+            #     src_focal,
+            #     feat=None,
+            #     net=nets[method_name],
+            #     render_par=render_pars[method_name],
+            #     eval_ray_num=10000 if "diff" in method_name else 20000,
+            # )
+            nets[method_name].encode(src_imgs[view_idx : view_idx + 1].to(device=DEVICE), src_poses[view_idx : view_idx + 1].to(device=DEVICE), src_focal.to(device=DEVICE))
+            nets[method_name].to_mesh()
 
         trg_norm_feats = {}
         for method_name in model_info:

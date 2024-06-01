@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from util import get_image_to_tensor_balanced, get_mask_to_tensor
+from featurenerf.src.util import get_image_to_tensor_balanced, get_mask_to_tensor
 
 
 class SRNDataset(torch.utils.data.Dataset):

@@ -84,8 +84,6 @@ def parse_args(
     if args.conf is None:
         args.conf = expconf.get_string("config." + args.name, default_conf)
 
-    if args.conf is None:
-        args.conf = expconf.get_string("config." + args.name, default_conf)
     if args.datadir is None:
         args.datadir = expconf.get_string("datadir." + args.name, default_datadir)
 
